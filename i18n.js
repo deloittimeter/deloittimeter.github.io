@@ -23,7 +23,7 @@ en:{
  credit:'Created by {team}', privacy_note:'Live messages pass through public relay servers. Do not use for confidential or client-sensitive content.', lang:'Language', correct_is:'Correct answer', correct_tag:'correct', slide_no_q:'(no question)'
 },
 he:{
- tagline:'סקרים, חידונים ושאלות ותשובות חיים לפגישות שלכם', create:'יצירת מצגת', create_desc:'בנו שאלות והציגו אותן בזמן אמת.',
+ tagline:'סקרים, חידונים, Q&A ועוד', create:'יצירת מצגת', create_desc:'בנו שאלות והציגו אותן בזמן אמת.',
  join:'הצטרפות למצגת', join_desc:'הזינו את הקוד שמופיע על מסך המציג.', code:'קוד', name_opt:'השם שלכם (לא חובה)', go:'כניסה',
  resume:'המשך מהפעם האחרונה', resume_desc:'יש מפגש ששמור בדפדפן הזה.', home:'דף הבית',
  editor_title:'שם המצגת', untitled:'מצגת ללא שם', slides:'שקופיות', add_slide:'הוספת שקופית', start:'התחלת הצגה',
