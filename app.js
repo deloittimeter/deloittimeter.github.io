@@ -2,7 +2,9 @@
 (() => {
 'use strict';
 const TEAM = 'Deloitte HC, OWT, Israel';
-const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://mqtt-dashboard.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
+/* Some mobile carriers and Wi-Fi networks block the non-standard WebSocket ports above, so a plain HTTPS (port 443) relay runs alongside them. */
+const NTFY = 'https://ntfy.sh/';
 const NS = 'deloittimeter/v1/';
 const COL = ['#86BC25', '#0097A9', '#046A38', '#00A3E0', '#012169', '#26890D', '#53565A', '#75787B'];
 const TYPES = ['mc', 'quiz', 'cloud', 'open', 'scale', 'rank', 'points', 'qa', 'content'];
@@ -55,6 +57,22 @@ function Net(room, side, onMsg, onStatus) {
   const clients = []; const seen = new Set(); let up = 0;
   const sub = NS + room + '/' + (side === 'host' ? 'i' : 's');
   const status = () => { up = clients.filter(c => c.connected).length; onStatus && onStatus(up); };
+  const tname = r => 'deloittimeter-v1-' + room + '-' + r;
+  const deliver = txt => {
+    let m; try { m = JSON.parse(txt); } catch (e) { return; }
+    if (!m || typeof m !== 'object') return;
+    if (m.m) { if (seen.has(m.m)) return; seen.add(m.m); if (seen.size > 1500) seen.delete(seen.values().next().value); }
+    try { onMsg(m); } catch (e) { console.error(e); }
+  };
+  let nt = null;
+  if (typeof EventSource !== 'undefined' && typeof fetch !== 'undefined') {
+    const es = new EventSource(NTFY + tname(side === 'host' ? 'i' : 's') + '/sse' + (side === 'host' ? '' : '?since=10m'));
+    nt = { connected: false, es, end() { es.close(); } };
+    es.onopen = () => { nt.connected = true; status(); onStatus && onStatus(up, true); };
+    es.onerror = () => { nt.connected = false; status(); };
+    es.onmessage = ev => { let d; try { d = JSON.parse(ev.data); } catch (e) { return; } if (d && d.event === 'message' && d.message) deliver(d.message); };
+    clients.push(nt);
+  }
   BROKERS.forEach(url => {
     let c;
     try { c = mqtt.connect(url, { clientId: 'dm_' + hex(14), connectTimeout: 10000, reconnectPeriod: 3000, clean: true, keepalive: 30 }); } catch (e) { return; }
@@ -62,10 +80,7 @@ function Net(room, side, onMsg, onStatus) {
     c.on('connect', () => { c.subscribe(sub, { qos: 0 }, () => {}); status(); onStatus && onStatus(up, true); });
     c.on('close', status); c.on('offline', status); c.on('error', () => {});
     c.on('message', (topic, buf) => {
-      let m; try { m = JSON.parse(buf.toString()); } catch (e) { return; }
-      if (!m || typeof m !== 'object') return;
-      if (m.m) { if (seen.has(m.m)) return; seen.add(m.m); if (seen.size > 1500) seen.delete(seen.values().next().value); }
-      try { onMsg(m); } catch (e) { console.error(e); }
+      deliver(buf.toString());
     });
   });
   return {
@@ -73,10 +88,11 @@ function Net(room, side, onMsg, onStatus) {
       if (!obj.m) obj.m = hex(12);
       const topic = NS + room + '/' + (side === 'host' ? 's' : 'i');
       const s = JSON.stringify(obj);
-      clients.forEach(c => { try { c.publish(topic, s, { qos: 0, retain: !!retain }); } catch (e) {} });
+      clients.forEach(c => { try { if (c === nt) return; c.publish(topic, s, { qos: 0, retain: !!retain }); } catch (e) {} });
+      if (nt && s.length < 3800) { try { fetch(NTFY + tname(side === 'host' ? 's' : 'i'), { method: 'POST', body: s }).catch(() => {}); } catch (e) {} }
     },
-    clear() { clients.forEach(c => { try { c.publish(NS + room + '/s', '', { qos: 0, retain: true }); } catch (e) {} }); },
-    close() { clients.forEach(c => { try { c.end(true); } catch (e) {} }); },
+    clear() { clients.forEach(c => { try { if (c !== nt) c.publish(NS + room + '/s', '', { qos: 0, retain: true }); } catch (e) {} }); },
+    close() { clients.forEach(c => { try { c === nt ? c.end() : c.end(true); } catch (e) {} }); },
     up: () => up
   };
 }
@@ -502,7 +518,7 @@ function participant(app, room, name) {
     }
   }
   draw();
-  setTimeout(() => { if (!seenAny) { view.replaceChildren(h('div', { class: 'card center' }, h('p', {}, t('p_conn_fail')), h('p', {}, h('a', { class: 'btn', href: '#/' }, t('home'))))); } }, 15000);
+  setTimeout(() => { if (!seenAny && !net.up()) { view.replaceChildren(h('div', { class: 'card center' }, h('p', {}, t('p_conn_fail')), h('p', {}, h('a', { class: 'btn', href: '#/' }, t('home'))))); } }, 15000);
 }
 
 /* ---------- boot ---------- */
